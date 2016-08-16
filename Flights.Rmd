@@ -1,0 +1,223 @@
+---
+title: 'Exercises 2: Flights at ABIA'
+author: "Brooks Beckelman, Zack Bilderback, Davis Townsend"
+output: html_document
+---
+
+```{r echo=FALSE}
+knitr::opts_chunk$set(echo = FALSE, warning=FALSE, message=FALSE)
+```
+
+```{r}
+library(mosaic)
+library(foreach)
+library(lubridate)
+library(ggplot2)
+library(plyr)
+
+rm(list=ls())
+flights = read.csv("abia.csv")
+attach(flights)
+```
+
+Our goal in exploring this data set is to provide analysis that allows one to make choices that optimize his or her air travel experience. This means discovering the best and worst times of year to fly, the best and worst times of day to fly, and the best and worst airlines to fly with.
+
+## Time of Year
+
+```{r}
+flights_dep = flights[flights$Origin == 'AUS',] # Flights departing from ABIA
+flights_arr = flights[flights$Dest == 'AUS',] # Flights arriving at ABIA
+flights_DepDelay = flights_dep[flights_dep$DepDelay>0,] # Dataframe of flights with departure delays
+flights_ArrDelay = flights_arr[flights_arr$ArrDelay>0,] # dataframe of flights with arrival delays
+
+# Find fraction of flight departures that were delayed in each month
+months=c(1:12)
+num_of_DepDelays = rep(0,length(months))
+num_of_ArrDelays = rep(0,length(months))
+num_of_flights = rep(0,length(months))
+num_of_deps = rep(0,length(months))
+num_of_arrs = rep(0, length(months))
+for (month in months){
+  DepDelay_month = flights_DepDelay[flights_DepDelay$Month==month,]
+  ArrDelay_month = flights_ArrDelay[flights_ArrDelay$Month==month,]
+  num_of_DepDelays[month] = nrow(DepDelay_month)
+  num_of_ArrDelays[month] = nrow(ArrDelay_month)
+  deps_month = flights_dep[flights_dep$Month==month,]
+  arrs_month = flights_arr[flights_arr$Month==month,]
+  num_of_deps[month] = nrow(deps_month)
+  num_of_arrs[month] = nrow(arrs_month)
+}
+
+fraction_DepDelay = num_of_DepDelays/num_of_deps
+fraction_ArrDelay = num_of_ArrDelays/num_of_arrs
+
+plot(months, num_of_deps, type='b', col='blue', main='Flights by Month', xlab='Month', ylab='Number of Flights', xaxt='n')
+points(months, num_of_arrs, col='gold4')
+lines(months, num_of_arrs, col='gold4')
+axis(side=1, at=months, labels=months)
+legend("bottomleft", c("Departures","Arrivals"), lty=c(1,1), col=c('blue','gold4'))
+
+plot(months, num_of_DepDelays, type='b', col='blue', main='Delays by Month', xlab='Month', ylab='Number of Delayed Flights', xaxt='n', ylim=c(1600,3000))
+points(months, num_of_ArrDelays, col='gold4')
+lines(months, num_of_ArrDelays, col='gold4')
+axis(side=1, at=months, labels=months)
+legend("bottomleft", c("Departures", "Arrivals"), lty=c(1,1), col=c('blue','gold4'))
+
+plot(months, fraction_DepDelay, type='b', col='blue', main='Fraction of Flights Delayed by Month', xlab='Month', ylab='Fraction of Flights Delayed', xaxt='n', ylim=c(0.4,0.75))
+points(months, fraction_ArrDelay, col='gold4')
+lines(months, fraction_ArrDelay, col='gold4')
+axis(side=1, at=months, labels=months)
+legend("topleft", c("Departures", "Arrivals"), lty=c(1,1), col=c('blue', 'gold4'))
+```
+
+These plots outline flights on a monthly basis. It seems that the best time to fly to avoid delays is between September and November. December appears to be the month when a flight is most likely to be delayed.
+
+---
+
+## Time of Day
+
+```{r}
+# Find fraction of flight departures that were delayed each hour
+hours = c(0:23)
+timeBeg = 0
+num_of_deps_ToD = rep(0, length(hours))
+num_of_DepDelays_ToD = rep(0, length(hours))
+num_of_arrs_ToD = rep(0, length(hours))
+num_of_ArrDelays_ToD = rep(0, length(hours))
+for (hr in hours){
+  timeInt = timeBeg:(timeBeg+99)
+  dep_timeInt = flights[flights$CRSDepTime %in% timeInt,]
+  arr_timeInt = flights[flights$CRSArrTime %in% timeInt,]
+  num_of_deps_ToD[hr] = nrow(dep_timeInt)
+  num_of_arrs_ToD[hr] = nrow(arr_timeInt)
+  DepDelay_timeInt = flights_DepDelay[flights_DepDelay$CRSDepTime %in% timeInt,]
+  ArrDelay_timeInt = flights_ArrDelay[flights_ArrDelay$CRSArrTime %in% timeInt,]
+  num_of_DepDelays_ToD[hr] = nrow(DepDelay_timeInt)
+  num_of_ArrDelays_ToD[hr] = nrow(ArrDelay_timeInt)
+  timeBeg = timeBeg+100
+}
+
+fraction_DepDelay_ToD = num_of_DepDelays_ToD/num_of_deps_ToD
+fraction_ArrDelay_ToD = num_of_ArrDelays_ToD/num_of_arrs_ToD
+
+plot(hours, num_of_deps_ToD, type='b', col='blue', main='Flights by Scheduled Departure/Arrival Time', xlab='Hour', ylab='Number of Flights', xaxt='n')
+points(hours, num_of_arrs_ToD, col='gold4')
+lines(hours, num_of_arrs_ToD, col='gold4')
+axis(side=1, at=hours[seq(0,length(hours),2)], labels=hours[seq(0,length(hours),2)])
+legend("topright", c("Departures", "Arrivals"), lty=c(1,1), col=c('blue', 'gold4'))
+
+plot(hours, num_of_DepDelays_ToD, type='b', col='blue', main='Delays by Scheduled Departure/Arrival Time', xlab='Hour', ylab='Number of Delays', xaxt='n')
+points(hours, num_of_ArrDelays_ToD, col='gold4')
+lines(hours, num_of_ArrDelays_ToD, col='gold4')
+axis(side=1, at=hours[seq(0,length(hours),2)], labels=hours[seq(0,length(hours),2)])
+legend("topright", c("Departures", "Arrivals"), lty=c(1,1), col=c('blue', 'gold4'))
+
+plot(hours, fraction_DepDelay_ToD, type='b', col='blue', main='Fraction of Flights Delayed by Scheduled Departure/Arrival Time', xlab='Hour', ylab='Fraction of Flights Delayed', xaxt='n', ylim=c(0,0.5))
+points(hours, fraction_ArrDelay_ToD, col='gold4')
+lines(hours, fraction_ArrDelay_ToD, col='gold4')
+axis(side=1, at=hours[seq(0,length(hours),2)], labels=hours[seq(0,length(hours),2)])
+legend("topleft", c("Departures","Arrivals"), lty=c(1,1), col=c('blue','gold4'))
+```
+
+These plots break down flights by scheduled departure and arrival times on an hourly basis. Hour 0 corresponds to all flights departing/arriving between 12 AM and 12:59 AM, hour 1 corresponds to flights between 1 AM and 1:59 AM, etc. It seems that flights scheduled to depart early in the morning and late at night are the least likely to be delayed. However, there are a limited number of flights late at night. 
+
+---
+
+## Airlines
+```{r}
+#Setup
+
+#dataframe of frequency of total flights by carrier
+airplane = read.csv("ABIA.csv", header=TRUE)
+attach(airplane)
+
+carriercount = count(airplane$UniqueCarrier)
+colnames(carriercount) <- c("UniqueCarrier","TotalFlights")
+```
+
+When examining airlines, we will consider two factors: delays and cancellations.
+
+<br>
+
+### Delays
+
+```{r}
+#Delays
+
+#first create new dataframe combining total flight count and total delay time
+x = data.frame(airplane$UniqueCarrier, airplane$CarrierDelay)
+y = aggregate(cbind(airplane$CarrierDelay) ~ UniqueCarrier, data=x, FUN=sum)
+colnames(y) <- c("UniqueCarrier","TotDelayTime")
+
+new = data.frame(carriercount$UniqueCarrier, carriercount$TotalFlights, y$TotDelayTime)
+
+#define colr of columns vector for use in graphs
+cols <- c('black', 'black', 'black', 'blue','blue', 'blue', 'blue','blue', 
+          'blue', 'blue','blue', 'blue', 'gold3', 'gold3', 'gold3', 'gold3')
+
+#now plot total delay time per carrier in a graph
+newsorted <- new[order(new$y.TotDelayTime), ]
+revdfsorted <- newsorted[rev(rownames(newsorted)),]
+
+barplot(revdfsorted$y.TotDelayTime, names.arg=revdfsorted$carriercount.UniqueCarrier, col=cols, ylim=c(0,70000), 
+        ylab = 'Total Delay Time (in minutes)', xlab = 'Airlines', main = 'Total Time Delay of Flights by Airline', las=2)
+
+#now calculate average delay time
+new["AvgTimeDelay"] <- new$y.TotDelayTime / new$carriercount.TotalFlights
+
+#sort the airlines by delay time percentage
+test <- new[order(new$AvgTimeDelay), ]
+revdf <- test[rev(rownames(test)),]
+
+#now plot this in a bar graph
+#Highlight airlines with most and least avg of delayed flights
+barplot(revdf$AvgTimeDelay, names.arg=revdf$carriercount.UniqueCarrier, col=cols, ylim=c(0,10), 
+        ylab = 'Average Time Delay (in minutes)', xlab = 'Airlines', main = 'Average Time Delay of Flights by Airline',
+        las=2)
+## We see that Mesa Airlines, Inc.(YV) has the highest average delay times, while Envoy Air(MQ) has the least average delay time
+```
+
+The preceding plots show the total delay time for each airline in 2008 and the average delay time per flight for each airline. The average was taken over all flights, including those that were not delayed, to give a better idea of how long one can expect to be delayed for a flight from that airline. There are a clear three airlines with longer average delays, Mesa Airlines (YV), ExpressJet (EV), and PSA airlines (OH). There are a clear four airlines with shorter average delays, Envoy Air (MQ), US Airways (US), Southwest Airlines (WN), and Frontier Airlines (F9).
+
+<br>
+
+### Cancellations
+
+```{r}
+#Cancellations
+
+#which carrier had most cancellations
+x1 = data.frame(airplane$UniqueCarrier, airplane$Cancelled)
+y1 = aggregate(cbind(airplane$Cancelled) ~ airplane$UniqueCarrier, data=x1, FUN=sum)
+colnames(y1) <- c("UniqueCarrier","TotalCancellations")
+
+#define colr of columns vector for use in graphs
+cols <- c('black', 'blue', 'blue', 'blue','blue', 'blue', 'blue','blue', 
+          'blue', 'blue','blue', 'blue', 'blue', 'gold3', 'gold3', 'gold3')
+
+#first create new dataframe combining total flight count and total cancellations
+new1 = data.frame(carriercount$UniqueCarrier, carriercount$TotalFlights, y1$TotalCancellations)
+
+#now plot total delay time per carrier in a graph
+new1sorted <- new1[order(new1$y1.TotalCancellations), ]
+revdfsorted1 <- new1sorted[rev(rownames(new1sorted)),]
+
+barplot(revdfsorted1$y1.TotalCancellations, names.arg=revdfsorted1$carriercount.UniqueCarrier, col=cols, ylim=c(0,600), 
+        ylab = 'Total Cancellations', xlab = 'Airlines', main = 'Total Cancellations by Airline', las=2)
+
+#now find and plot average cancellations per carrier
+new1["AvgCancellation"] <- new1$y1.TotalCancellations / new$carriercount.TotalFlights
+
+#sort by Average Cancellation
+test1 <- new1[order(new1$AvgCancellation), ]
+revdf1 <- test1[rev(rownames(test1)),]
+
+#now plot this in a bar graph
+#Highlight airlines with most and least avg of delayed flights
+barplot(revdf1$AvgCancellation, names.arg=revdf1$carriercount.UniqueCarrier, col=cols, ylim=c(0,.1), 
+        ylab = 'Average Cancellation Percent', xlab = 'Airlines', main = 'Average Cancellation Rate by Airline', las=2)
+
+# Envoy Air(MQ) had the highest cancellation rate, while Northwest Airlines (NW) had the lowest cancellation rate at 0!
+```
+
+These plots illustrate the total cancellations and average cancellation rate for each airline. American Airlines (AA) has almost three times as many cancellations as any other airline, but Envoy Air (MQ) has the highest average cancellation rate. Northwest Airlines (NW), Frontier Airlines (F9), and US Airways (US) have the best cancellation rates. 
