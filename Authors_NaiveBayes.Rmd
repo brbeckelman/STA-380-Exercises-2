@@ -1,0 +1,181 @@
+---
+title: "Author Attribution"
+author: "Brooks Beckelman, Zack Bilderback, Davis Townsend"
+output: pdf_document
+---
+
+## Naive - Bayes Model
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = FALSE, warning=FALSE, message=FALSE)
+```
+
+The first model that we will explore for predicting the author of an article based on textual content is a Naive Bayes Model. The first step is to create a document term matrix where each row represents a document, each column represents a word, and the values represent the frequency of each word in each document.
+
+```{r}
+setwd("C:/Users/brook/Desktop/Predictive_Modeling/Section2/Exercises/Exercises 2")
+library(tm)
+rm(list=ls())
+
+## Rolling all directories in training set into one corpus
+author_dirs = Sys.glob('ReutersC50/C50train/*')
+file_list = NULL
+labels = NULL
+for(author in author_dirs) {
+	author_name = substring(author, first=21)
+	files_to_add = Sys.glob(paste0(author, '/*.txt'))
+	file_list = append(file_list, files_to_add)
+	labels = append(labels, rep(author_name, length(files_to_add)))
+}
+
+# Create readerPlain function
+readerPlain = function(fname){
+				readPlain(elem=list(content=readLines(fname)), id=fname, language='en') }
+
+all_docs = lapply(file_list, readerPlain) 
+names(all_docs) = file_list
+names(all_docs) = sub('.txt', '', names(all_docs))
+
+my_corpus = Corpus(VectorSource(all_docs))
+names(my_corpus) = file_list
+
+# Preprocessing
+my_corpus = tm_map(my_corpus, content_transformer(tolower)) # make everything lowercase
+my_corpus = tm_map(my_corpus, content_transformer(removeNumbers)) # remove numbers
+my_corpus = tm_map(my_corpus, content_transformer(removePunctuation)) # remove punctuation
+my_corpus = tm_map(my_corpus, content_transformer(stripWhitespace)) # remove excess white-space
+my_corpus = tm_map(my_corpus, content_transformer(removeWords), stopwords("SMART")) # remove stop words
+
+DTM = DocumentTermMatrix(my_corpus)
+DTM
+inspect(DTM[1:5,1:3])
+```
+
+The document term matrix contains 2500 rows (documents) and 31,423 columns (words). All of the words were converted to lowercase, and all numbers, punctuation, white-space, and stop words were removed. The first 5 rows and first 3 columns are shown above to give a sense of what we are working with. The matrix is very sparse, so let's remove some terms to make it more condensed. 
+
+```{r}
+DTM = removeSparseTerms(DTM, 0.95)
+DTM
+```
+
+The matrix is still very sparse, but by removing all terms that have a count of zero in greater than 90% of the documents, we were able to reduce the number of terms to 641. We felt that it was important to get the matrix as condensed as possible, while maintaining accuracy, because there are so many documents to be considered.
+
+The next step is to create our model from the training data. In order to do this, we split the training set based on author and calculated a multinomial probability vector for each one. The probabilities associated with Aaron Pressman for the first five words are shown below.
+
+```{r}
+X_train = as.matrix(DTM)
+smooth_count = 1/nrow(X_train)
+
+author_splits = seq(0,2500,50)
+iters = 1:length(author_splits)
+iters = iters[-51]
+labels_new = rep(0,50)
+w = matrix(0, nrow=50, ncol=641)
+for (i in iters){
+  split1 = author_splits[i]+1
+  split2 = author_splits[i+1]
+  train = X_train[split1:split2,]
+  labels_new[i] = labels[split1]
+  w[i,] = colSums(train + smooth_count)
+  w[i,] = w[i,]/sum(w)
+}
+w = data.frame(w, row.names = labels_new)
+w[1,1:5]
+```
+
+Now that we have our Naive Bayes model, we must check it against the test set. To do this, we created a new document term matrix. This matrix contains the same terms (columns) as the previous matrix but has 2500 new documents (rows). For each document, each author is assigned a score. This score is calculated by first taking the product of each term's frequency in that document and the log of the mulinomial probability for that author using that word. All of these products are summed for each author, and whoever has the highest score for that document is predicted to have written it. The first ten predictions are shown below.
+
+```{r}
+## Rolling all directories in test set into one corpus
+author_dirs = Sys.glob('ReutersC50/C50test/*')
+file_list = NULL
+test_labels = NULL
+for(author in author_dirs) {
+	author_name = substring(author, first=20)
+	files_to_add = Sys.glob(paste0(author, '/*.txt'))
+	file_list = append(file_list, files_to_add)
+	test_labels = append(test_labels, rep(author_name, length(files_to_add)))
+}
+
+all_docs = lapply(file_list, readerPlain) 
+names(all_docs) = file_list
+names(all_docs) = sub('.txt', '', names(all_docs))
+
+my_corpus = Corpus(VectorSource(all_docs))
+names(my_corpus) = file_list
+
+# Preprocessing
+my_corpus = tm_map(my_corpus, content_transformer(tolower)) # make everything lowercase
+my_corpus = tm_map(my_corpus, content_transformer(removeNumbers)) # remove numbers
+my_corpus = tm_map(my_corpus, content_transformer(removePunctuation)) # remove punctuation
+my_corpus = tm_map(my_corpus, content_transformer(stripWhitespace)) # remove excess white-space
+my_corpus = tm_map(my_corpus, content_transformer(removeWords), stopwords("SMART")) # remove stop words
+
+DTM = DocumentTermMatrix(my_corpus)
+DTM = removeSparseTerms(DTM, 0.95)
+
+X_test = as.matrix(DTM)
+
+X_test1 = data.frame(X_test[,intersect(colnames(X_test), colnames(X_train))])
+X_test2 = read.table(textConnection(""), col.names = colnames(X_train),
+                     colClasses = "integer")
+library(plyr)
+X_test = rbind.fill(X_test1, X_test2)
+X_test[is.na(X_test)] = 0
+X_test = X_test[, order(names(X_test))]
+```
+
+```{r}
+author_preds = rep(0,2500)
+for (doc_num in 1:nrow(X_test)){
+  doc_terms = X_test[doc_num,]
+  author_scores = rep(0,50)
+  for (i in 1:nrow(w)){
+    author_scores[i] = sum(doc_terms*log(w[i,]))
+  }
+  author_pred_num = which.max(author_scores)
+  author_preds[doc_num] = labels_new[author_pred_num]
+}
+
+author_preds[1:10]
+```
+
+Now, let's see how accurate our predictions were overall. 
+
+```{r}
+num_correct = 0
+for (i in 1:2500){
+  if (author_preds[i] == test_labels[i]){
+    num_correct = num_correct + 1
+  }
+}
+
+pred_accuracy = num_correct / length(author_preds)
+
+cat('The model predicted', num_correct, 'correctly out of', length(author_preds), 'for an accuracy of', pred_accuracy)
+```
+
+This accuracy is not as high as we had hoped. Let's look at how well the model performed for each individual author. 
+
+```{r}
+author_accuracy = rep(0,50)
+split1=1
+for (i in 1:50){
+  split2 = split1 + 49
+  num_correct = 0
+  for (j in split1:split2){
+    if (author_preds[j] == test_labels[j]){
+      num_correct = num_correct + 1
+    }
+  }
+  author_accuracy[i] = num_correct / 50
+  split1 = split2 + 1
+}
+
+under50 = length(author_accuracy[author_accuracy <= 0.5])
+under25 = length(author_accuracy[author_accuracy <= 0.25])
+
+cat('Out of the', length(author_accuracy), 'authors, the model predicted less than half of the documents correctly for', under50, 'authors.') 
+cat('The model predicted less than 25% of the documents correctly for', under25, 'authors.') 
+  cat('The author that the model had the hardest time predicting was', labels_new[which.min(author_accuracy)], 'with an accuracy of', min(author_accuracy))
+```
