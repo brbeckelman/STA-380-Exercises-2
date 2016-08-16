@@ -1,0 +1,46 @@
+---
+title: "Practice with Association Rule Mining"
+author: "Brooks Beckelman, Zack Bilderback, Davis Townsend"
+output: pdf_document
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = FALSE, message = FALSE, warning = FALSE)
+```
+
+Since the data was in a text file rather than a csv file, we had to handle the process of turning each row into a transaction differently from the example in class. There is a built in function called read.transactions that reads in text files line by line and converts each line to a single transaction which is exactly what we needed for the is quesiton.
+```{r}
+setwd("C:/Users/brook/Desktop/Predictive_Modeling/Section2/Exercises/Exercises 2")
+#Question 3
+library(arules)
+
+#Read text file in and convert to transactions for apriori function
+groceries <- read.transactions("groceries.txt", sep = ",")
+```
+
+The support parameter was set at .006 to create 464 rules rather than having the parameter set to something higher such as .05 which only made 5 rules. The confidence parameter was also set slightly low at .25 to allow for more rules. We can then subset rules based off each parameter if we want to be more strict on which rules we view.
+```{r} 
+#Make rules for grocery shopping; can play with parameters to make or delete rules
+basketrules <- apriori(groceries, parameter=list(support=.006, confidence=.25, maxlen=10))
+```
+
+First ten rules. Interestingly we see that someone with an empty basket is most likely to buy only whole milk however, we have a confidence level of .25
+```{r}
+#Look at different rules
+inspect(basketrules[1:10])
+```
+
+We can subset off rules as well if we want a higher support or confidence level.
+```{r echo=TRUE}
+inspect(subset(basketrules, subset=support > .01 & confidence > 0.5)[1:10])
+```
+
+Also, we can see which rules have the highest values in "lift", "confidence", or "support". 
+```{r echo=TRUE}
+##Sorted by lift
+inspect(sort(basketrules, by = "lift")[1:5])
+##Sorted by confidence
+inspect(sort(basketrules, by = "confidence")[1:5])
+##Sorted by support
+inspect(sort(basketrules, by = "support")[1:5])
+```
